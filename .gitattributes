@@ -1,0 +1,22 @@
+# ---------------------------------------------------------------------------
+# 行尾规则（务必保持：换行符不统一会导致 diff 全量飘红、协作时互相覆盖）
+#
+#   * text=auto eol=lf  -> 文本文件入库与工作区统一 LF（Python 项目通行做法）
+#   *.cmd  -text        -> .cmd 完全不转换、字节原样入库
+#        为什么不写 eol=crlf：那样 git 仍会把仓库里存成 LF，
+#        而 clone（autocrlf=false）和 GitHub 的 ZIP 下载都不做换行转换，
+#        拿到的就是 LF 版批处理 —— cmd.exe 按字节偏移续读，会出怪现象。
+#        -text 后仓库里保存的就是 CRLF，怎么分发都是对的。
+#        （这些文件写在 * 之后才生效：gitattributes 以最后匹配的规则为准）
+# ---------------------------------------------------------------------------
+* text=auto eol=lf
+*.cmd -text
+
+# 二进制文件不参与任何行尾/编码转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary

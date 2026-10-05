@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FileShare · 局域网文件互传</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body data-token="__FS_TOKEN__" data-version="__FS_VERSION__">
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">⇄</span>
+    <div>
+      <div class="title">FileShare <span class="ver">v__FS_VERSION__</span></div>
+      <div class="sub" id="myInfo">正在读取本机信息…</div>
+    </div>
+  </div>
+  <div class="topActions">
+    <button id="btnScan" class="btn" title="扫描本网段查找其他电脑">扫描设备</button>
+    <button id="btnAdd" class="btn" title="手动填写对方 IP">添加设备</button>
+    <button id="btnQr" class="btn" title="手机扫码即可下载我的共享文件">二维码</button>
+    <button id="btnSettings" class="btn">设置</button>
+    <button id="btnHelp" class="btn">帮助</button>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- 左：我的共享目录 -->
+  <section class="panel" id="panelLeft">
+    <div class="panelHead">
+      <h2>我的共享目录<span class="hint">把文件拖到这里 = 共享出去</span></h2>
+      <div class="pathBar">
+        <button class="mini" id="leftUp" title="返回上级">↑</button>
+        <span class="crumb" id="leftCrumb">shared</span>
+        <button class="mini" id="leftRefresh" title="刷新">⟳</button>
+        <button class="mini" id="leftMkdir" title="新建文件夹">＋</button>
+      </div>
+    </div>
+    <div class="list" id="leftList"></div>
+    <div class="dropZone" id="leftDrop">
+      <div class="dzText">拖拽文件 / 文件夹到这里</div>
+      <div class="dzSub">或 Ctrl+V 粘贴截图与文本</div>
+      <input type="file" id="filePicker" multiple hidden>
+      <button class="btn small" id="btnPick">选择文件…</button>
+    </div>
+  </section>
+
+  <!-- 右：对方目录 -->
+  <section class="panel" id="panelRight">
+    <div class="panelHead">
+      <h2>对方共享目录<span class="hint">拖到资源管理器 = 下载</span></h2>
+      <div class="pathBar">
+        <select id="peerSelect"><option value="">（未选择设备）</option></select>
+        <button class="mini" id="peerUp" title="返回上级">↑</button>
+        <span class="crumb" id="peerCrumb">—</span>
+        <button class="mini" id="peerRefresh" title="刷新">⟳</button>
+      </div>
+    </div>
+    <div class="list" id="peerList"></div>
+    <div class="dropZone peer" id="peerDrop">
+      <div class="dzText" id="peerDropText">把左边文件拖到这里 = 推送给对方</div>
+      <div class="dzSub" id="peerDropSub">对方为本工具时直接落入其接收目录</div>
+    </div>
+  </section>
+</main>
+
+<!-- 传输队列 -->
+<section class="queue" id="queueBox">
+  <div class="queueHead">
+    <h2>传输队列 <span class="badge" id="activeCount">0 进行中</span></h2>
+    <div class="topActions">
+      <button class="btn small" id="btnRefreshState">刷新</button>
+      <button class="btn small danger" id="btnCancelAll">全部取消</button>
+    </div>
+  </div>
+  <div class="queueList" id="queueList"></div>
+</section>
+
+<!-- 弹窗：接受/拒绝 -->
+<div class="modal" id="pendingModal" hidden>
+  <div class="modalBox">
+    <h3>有设备想发文件给你</h3>
+    <div id="pendingBody"></div>
+    <div class="modalActions">
+      <button class="btn danger" id="btnReject">拒绝</button>
+      <button class="btn primary" id="btnAccept">接受</button>
+    </div>
+    <div class="countdown" id="pendingCountdown"></div>
+  </div>
+</div>
+
+<!-- 弹窗：二维码 -->
+<div class="modal" id="qrModal" hidden>
+  <div class="modalBox">
+    <h3>手机扫码下载我的共享文件</h3>
+    <div class="qrWrap"><canvas id="qrCanvas"></canvas></div>
+    <div class="qrUrl" id="qrUrl"></div>
+    <div class="hintBox">手机连同一个 WiFi，扫码即可用浏览器浏览/下载；也可在浏览器直接打开上面的地址。</div>
+    <div class="modalActions"><button class="btn primary" id="btnQrClose">关闭</button></div>
+  </div>
+</div>
+
+<!-- 弹窗：设置 -->
+<div class="modal" id="settingsModal" hidden>
+  <div class="modalBox wide">
+    <h3>设置</h3>
+    <div class="form">
+      <label>本机显示名<input id="setAlias" type="text" maxlength="64"></label>
+      <label>共享目录<input id="setShare" type="text"></label>
+      <label>接收目录<input id="setInbox" type="text"></label>
+      <label>下载目录<input id="setDownloads" type="text"></label>
+      <label class="row"><input id="setAutoAccept" type="checkbox"> 自动接受别人发来的文件（不弹窗确认）</label>
+      <label class="row"><input id="setKeepCopy" type="checkbox"> 拖出下载时在本机 downloads 目录留一份副本</label>
+      <label class="row"><input id="setAllowDelete" type="checkbox"> 允许通过界面/接口删除共享目录内的内容</label>
+      <label>PIN（留空表示不需要；用于与官方 LocalSend 互通）<input id="setPin" type="text" maxlength="16"></label>
+      <label>本机指纹（两台机器必须不同；相同说明 data 目录被整体复制过）
+        <input id="setFingerprint" type="text" readonly>
+      </label>
+    </div>
+    <div class="modalActions">
+      <button class="btn" id="btnSettingsClose">取消</button>
+      <button class="btn primary" id="btnSettingsSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 弹窗：帮助 -->
+<div class="modal" id="helpModal" hidden>
+  <div class="modalBox wide">
+    <h3>怎么用</h3>
+    <ol class="helpList">
+      <li><b>左面板</b>是你共享出去的目录。把文件从资源管理器拖进左面板，文件就放进了共享目录。</li>
+      <li>另一台电脑打开本工具后，在<b>右面板</b>选中你，就能看到这些文件。</li>
+      <li>把右面板的文件<b>拖到桌面或任意文件夹</b>，浏览器会完成下载；也可以拖到左面板直接下载进本机目录。</li>
+      <li>把左面板的文件<b>拖到右面板</b>，就推送到对方（对方是本工具时落到它的接收目录）。</li>
+      <li>对方若是手机上的官方 LocalSend：右面板无法浏览（协议不支持），但可把文件拖到右侧推送过去，对方会弹出接受提示。</li>
+      <li>手机不装任何 App：点<b>二维码</b>，扫码即可在浏览器里下载你共享的文件。</li>
+    </ol>
+    <div class="hintBox">首次运行若对方连不上：在这台电脑以<b>管理员</b>身份运行一次 <code>firewall.cmd</code>，放行 TCP 8099 与 UDP 53317。</div>
+    <div class="modalActions"><button class="btn primary" id="btnHelpClose">知道了</button></div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script src="/qr.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
